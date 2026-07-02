@@ -48,20 +48,24 @@ class PostRepositoryImpl(private val dao: PostDao) : PostRepository {
     }
 
     override suspend fun likeById(id: Long) {
-        val current = dao.getById(id)
-        if (current != null) {
-            val updated = current.copy(likes = current.likes + 1, likedByMe = true)
-            dao.insert(updated)
-        }
+        val current = dao.getById(id) ?: throw IllegalStateException("Post not found locally")
+        val isLiked = current.likedByMe
+
         try {
-            val response = PostsApi.service.likeById(id)
+            val response = if (isLiked) {
+                PostsApi.service.dislikeById(id)
+            } else {
+                PostsApi.service.likeById(id)
+            }
             if (!response.isSuccessful) {
                 throw ApiError(response.code(), response.message())
             }
-            val body = response.body()
-            if (body != null) {
-                dao.insert(PostEntity.fromDto(body))
-            }
+            val updated = current.copy(
+                likedByMe = !isLiked,
+                likes = if (isLiked) (current.likes ?: 0) - 1 else (current.likes ?: 0) + 1
+            )
+            dao.insert(updated)
+
         } catch (e: IOException) {
             throw NetworkError
         } catch (e: Exception) {
@@ -70,15 +74,22 @@ class PostRepositoryImpl(private val dao: PostDao) : PostRepository {
     }
 
     override suspend fun removeById(id: Long) {
+        val removedPost = dao.getById(id)
+            ?: throw IllegalStateException("Post not found locally")
+
         dao.removeById(id)
+
         try {
             val response = PostsApi.service.removeById(id)
             if (!response.isSuccessful) {
+                dao.insert(removedPost)
                 throw ApiError(response.code(), response.message())
             }
         } catch (e: IOException) {
+            dao.insert(removedPost)
             throw NetworkError
         } catch (e: Exception) {
+            dao.insert(removedPost)
             throw UnknownError
         }
     }
