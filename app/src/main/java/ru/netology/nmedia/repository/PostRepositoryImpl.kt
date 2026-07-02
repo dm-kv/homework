@@ -47,9 +47,16 @@ class PostRepositoryImpl(private val dao: PostDao) : PostRepository {
         }
     }
 
+
     override suspend fun likeById(id: Long) {
         val current = dao.getById(id) ?: throw IllegalStateException("Post not found locally")
         val isLiked = current.likedByMe
+        val updated = current.copy(
+            likedByMe = !isLiked,
+            likes = if (isLiked) (current.likes ?: 0) - 1 else (current.likes ?: 0) + 1
+        )
+
+        dao.insert(updated)
 
         try {
             val response = if (isLiked) {
@@ -60,15 +67,12 @@ class PostRepositoryImpl(private val dao: PostDao) : PostRepository {
             if (!response.isSuccessful) {
                 throw ApiError(response.code(), response.message())
             }
-            val updated = current.copy(
-                likedByMe = !isLiked,
-                likes = if (isLiked) (current.likes ?: 0) - 1 else (current.likes ?: 0) + 1
-            )
-            dao.insert(updated)
 
         } catch (e: IOException) {
+            dao.insert(current)
             throw NetworkError
         } catch (e: Exception) {
+            dao.insert(current)
             throw UnknownError
         }
     }
@@ -76,15 +80,13 @@ class PostRepositoryImpl(private val dao: PostDao) : PostRepository {
     override suspend fun removeById(id: Long) {
         val removedPost = dao.getById(id)
             ?: throw IllegalStateException("Post not found locally")
-
         dao.removeById(id)
-
         try {
             val response = PostsApi.service.removeById(id)
             if (!response.isSuccessful) {
-                dao.insert(removedPost)
                 throw ApiError(response.code(), response.message())
             }
+            
         } catch (e: IOException) {
             dao.insert(removedPost)
             throw NetworkError
