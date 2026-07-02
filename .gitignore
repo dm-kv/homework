@@ -1,6 +1,9 @@
+reserve.md
 HELP.md
 .gradle
 build/
+.google-services.json
+android/app/google-services.json
 
 ### STS ###
 .apt_generated
@@ -44,4 +47,4 @@ captures/
 *.rar
 
 ### Gradle ###
-!/gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
